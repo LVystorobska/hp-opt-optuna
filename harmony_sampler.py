@@ -2,7 +2,6 @@ from collections import defaultdict
 from typing import Any
 from typing import Callable
 from typing import cast
-from typing import DefaultDict
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -14,13 +13,11 @@ import numpy as np
 
 import optuna
 from optuna._experimental import ExperimentalWarning
-from optuna.distributions import BaseDistribution
 import optuna._transform as transform
 from optuna import distributions
 from optuna.samplers._base import BaseSampler
 from optuna.samplers._random import RandomSampler
 from optuna.study import Study
-from optuna.study import StudyDirection
 from optuna.study._multi_objective import _dominates
 from optuna.trial import FrozenTrial
 from optuna.trial import TrialState
@@ -82,10 +79,6 @@ class HarmonySearchSampler(BaseSampler):
         self._random_sampler.reseed_rng()
         self._rng = np.random.RandomState()
 
-    # def infer_relative_search_space(
-    #     self, study: Study, trial: FrozenTrial
-    # ) -> Dict[str, BaseDistribution]:
-    #     return {}
     def infer_relative_search_space(self, study, trial):
         return optuna.samplers.intersection_search_space(study)
 
@@ -95,9 +88,7 @@ class HarmonySearchSampler(BaseSampler):
         trial: FrozenTrial,
         search_space
     ) -> Dict[str, Any]:
-        # trial_id = trial._trial_id
         completed_trials_num, random_trial = self._collect_previous_squad(study)
-        # print('completed_trials_num:', completed_trials_num)
         params = {}
 
         if random_trial is None:
@@ -108,28 +99,18 @@ class HarmonySearchSampler(BaseSampler):
             return params
         
         random_trial_params = random_trial.params
-        # print('random_trial_params', random_trial_params)
-        # print('search space:', search_space.items())
-
         for param_name, param_distribution in search_space.items():
-            # print('BEFORE COEF COMPUTE')
             self._HMCR = self.get_current_HMCR(completed_trials_num)
             self._PAR = self.get_current_PAR(completed_trials_num)
-            # print('HMCR:', self._HMCR)
-            # print('PAR:', self._PAR)
             hmcr_rnd = self._rng.uniform(0, 1)
-            # print('hmcr_rnd', hmcr_rnd)
             if self._HMCR < hmcr_rnd:
                 self._n_triggered_HMCR += 1
-                # print('PASS HMCR')
                 random_param = random_trial_params.get(param_name, None)
                 if isinstance(param_distribution, distributions.CategoricalDistribution):
                     rnd_param_transformed = float(param_distribution.to_internal_repr(random_param))
                     rnd_for_test = self._rng.uniform(0, 1) 
                     self._n_triggered_HMCR += 1 if self._PAR <= rnd_for_test else 0
-                    # print('PASS PAR:', rnd_for_test)
                     new_param_transformed = (rnd_param_transformed 
-                                                # if self._PAR <= self._rng.uniform(0, 1) 
                                                 if self._PAR <= rnd_for_test
                                                 else (rnd_param_transformed + 
                                                         self._band_width*(self._rng.uniform(0, 1) - 0.5)
@@ -157,7 +138,6 @@ class HarmonySearchSampler(BaseSampler):
         hmcr = min(self._n_triggered_HMCR/self._harmony_memory_size, 1)
         if hmcr == 0:
             hmcr = 1/(1 + 1e-7 + np.exp(np.log(0.01*(self._max_iter-completed_trials_num))))
-            # print('hmcr', hmcr)
         if hmcr == 1:
             hmcr = 1/(1 + 1e-7 + np.exp(-np.log(0.01*(self._max_iter-completed_trials_num))))
         return hmcr
@@ -166,7 +146,6 @@ class HarmonySearchSampler(BaseSampler):
         par = min(self._n_triggered_PAR/self._harmony_memory_size, 1)
         if par == 0:
             par = 1/(1 + 1e-7 + np.exp(np.log(0.01*(self._max_iter-completed_trials_num))))
-            # print('par', par)
         if par == 1:
             par = 1/(1 + 1e-7 + np.exp(-np.log(0.01*(self._max_iter-completed_trials_num))))
         return par
